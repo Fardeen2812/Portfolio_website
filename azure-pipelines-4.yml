@@ -1,0 +1,59 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  azureSubscription: 'Fardeen2812'
+  appName: 'fardeen-portfolio-website'
+  resourceGroup: 'Devops-rsc'
+  location: 'Central India'
+
+stages:
+- stage: Build
+  jobs:
+  - job: Build
+    steps:
+    - task: CopyFiles@2
+      inputs:
+        contents: '**'
+        targetFolder: '$(Build.ArtifactStagingDirectory)'
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: '$(Build.ArtifactStagingDirectory)'
+        artifactName: 'drop'
+
+- stage: Deploy
+  jobs:
+  - deployment: DeployWebApp
+    environment: 'production'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebApp@1
+            inputs:
+              azureSubscription: $(azureSubscription)
+              appName: $(appName)
+              package: '$(Build.ArtifactStagingDirectory)/drop'
+
+- stage: Verify
+  jobs:
+  - job: VerifyDeployment
+    steps:
+    - script: |
+        result=$(curl -s -o /dev/null -w "%{http_code}" https://fardeen-portfolio-website-9e1e5.azurewebsites.net)
+        if [ "$result" == "200" ]; then
+          echo "Website is live"
+        else
+          echo "Website is not accessible. HTTP Status: $result"
+          exit 1
+      displayName: 'Check Website Status'
+
