@@ -1,74 +1,67 @@
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 
-name: Build and deploy Node.js app to Azure Web App - Fardeen-Portfolio-website
+The pipeline is failing because the `npm run build --if-present` and `npm run test --if-present` commands cannot find the `package.json` file in the repository. Here's the relevant error message from the logs:
 
-on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+```
+npm error code ENOENT
+npm error syscall open
+npm error path /home/runner/work/Portfolio_website/Portfolio_website/package.json
+npm error enoent Could not read package.json: Error: ENOENT: no such file or directory, open '/home/runner/work/Portfolio_website/Portfolio_website/package.json'
+npm error enoent This is related to npm not being able to find a file.
+```
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read #This is required for actions/checkout
+This error indicates that the `package.json` file is missing or not located in the expected directory.
 
-    steps:
-      - uses: actions/checkout@v4
+### Steps to Resolve:
 
-      - name: Set up Node.js version
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18.x'
+1. **Check `package.json` Location**:
+   - Ensure that the `package.json` file exists in the root directory of your repository.
 
-      - name: npm install, build, and test
-        run: |
-          npm install
-          npm run build --if-present
-          npm run test --if-present
+2. **Update Pipeline Configuration**:
+   - If the `package.json` file is in a sub-directory, update the pipeline configuration to navigate to the correct directory before running npm commands.
 
-      - name: Zip artifact for deployment
-        run: zip release.zip ./* -r
+Here's an example of how you might update your pipeline YAML file to navigate to a sub-directory (if applicable):
 
-      - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
-        with:
-          name: node-app
-          path: release.zip
+```yaml
+trigger:
+- main
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    environment:
-      name: 'Production'
-      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
-    permissions:
-      id-token: write #This is required for requesting the JWT
-      contents: read #This is required for actions/checkout
+pool:
+  vmImage: 'ubuntu-latest'
 
-    steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: node-app
+steps:
+- task: CopyFiles@2
+  inputs:
+    contents: '**'
+    targetFolder: '$(Build.ArtifactStagingDirectory)'
 
-      - name: Unzip artifact for deployment
-        run: unzip release.zip
-      
-      - name: Login to Azure
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_09C6CE4DF29A4D0A833A24C9239E99A9 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_C66478E07A2F4086A6D75361BC53813B }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_17C76D9F0B784661B3D0DEB9C3EC49DC }}
+- task: PublishBuildArtifacts@1
+  inputs:
+    pathToPublish: '$(Build.ArtifactStagingDirectory)'
+    artifactName: 'drop'
 
-      - name: 'Deploy to Azure Web App'
-        id: deploy-to-webapp
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: 'Fardeen-Portfolio-website'
-          slot-name: 'Production'
-          package: .
-          
+- script: |
+    cd path/to/sub-directory  # Change to the directory containing package.json
+    npm install
+    npm run build --if-present
+    npm run test --if-present
+  displayName: 'Install and Build'
+
+- task: AzureWebApp@1
+  inputs:
+    azureSubscription: 'Azure for Students'
+    appName: 'Fardeen-Portfolio-website'
+    package: '$(Build.ArtifactStagingDirectory)/drop'
+
+- script: |
+    result=$(curl -s -o /dev/null -w "%{http_code}" https://Fardeen-Portfolio-website.azurewebsites.net)
+    if [ "$result" == "200" ]; then
+      echo "Website is live"
+    else
+      echo "Website is not accessible. HTTP Status: $result"
+      exit 1
+  displayName: 'Check Website Status'
+```
+
+Verify that the `package.json` file is in the correct location and update the pipeline script accordingly. This should resolve the `ENOENT` error and allow the build to proceed.
